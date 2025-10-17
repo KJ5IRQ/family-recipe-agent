@@ -1,0 +1,117 @@
+<!doctype html>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Family Recipe Agent</title>
+<style>
+  :root { font-family: system-ui, sans-serif; }
+  body { margin: 16px; max-width: 900px; }
+  h2 { margin-top: 24px; }
+  input, textarea, select, button { padding: 10px; font-size: 16px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .card { border: 1px solid #ddd; border-radius: 12px; padding: 12px; margin: 8px 0; }
+  pre { white-space: pre-wrap; word-break: break-word; }
+  .muted { color: #666; font-size: 14px; }
+</style>
+<body>
+  <h1>Family Recipe Agent</h1>
+  <div class="muted">API: <span id="api"></span></div>
+
+  <h2>Search</h2>
+  <div class="row">
+    <input id="q" placeholder="search name…">
+    <input id="tags" placeholder="tags (comma separated)">
+    <select id="methods">
+      <option value="">any method</option>
+      <option value="freeze">freeze</option>
+      <option value="pressure-can">pressure-can</option>
+    </select>
+    <button onclick="search()">Search</button>
+  </div>
+  <div id="results"></div>
+
+  <h2>Add Recipe</h2>
+  <textarea id="recipeJson" rows="10" style="width:100%" placeholder='{
+  "name":"Breakfast Burritos (Freeze)",
+  "yield_units":12,
+  "unit_desc":"burritos",
+  "methods":"freeze",
+  "appliances":"microwave,oven,air_fryer",
+  "tags":"breakfast,make-ahead",
+  "ingredients":[
+    {"item":"eggs","qty":18,"unit":"each"},
+    {"item":"sausage","qty":2,"unit":"lb"},
+    {"item":"cheese","qty":24,"unit":"oz"},
+    {"item":"potatoes","qty":2,"unit":"lb"},
+    {"item":"tortillas 10in","qty":12,"unit":"each"}
+  ],
+  "steps":"Cook; assemble; wrap; freeze"
+}'></textarea>
+  <div><button onclick="addRecipe()">Add / Update</button> <span id="addOut" class="muted"></span></div>
+
+  <h2>Plan & Scale</h2>
+  <div class="row">
+    <input id="recipeId" placeholder="recipe_id (use a result)">
+    <input id="targetUnits" type="number" placeholder="target units">
+    <button onclick="scale()">Scale</button>
+  </div>
+  <div id="scaleOut"></div>
+
+<script>
+const API = 'https://pantry-prep-api.kj5irq.workers.dev';
+document.getElementById('api').textContent = API;
+
+function el(tag, attrs={}, ...kids){
+  const e = document.createElement(tag);
+  Object.entries(attrs).forEach(([k,v]) => e.setAttribute(k,v));
+  kids.forEach(k => e.append(k));
+  return e;
+}
+
+async function search(){
+  const q=document.getElementById('q').value.trim();
+  const tags=document.getElementById('tags').value.trim();
+  const methods=document.getElementById('methods').value;
+  const qs=new URLSearchParams();
+  if(q) qs.set('search', q);
+  if(tags) qs.set('tags', tags);
+  if(methods) qs.set('methods', methods);
+  const r=await fetch(`${API}/recipes?${qs}`);
+  const data=await r.json();
+  const box=document.getElementById('results');
+  box.innerHTML='';
+  if(!Array.isArray(data)||!data.length){ box.textContent='No recipes found.'; return; }
+  data.forEach(rec=>{
+    const card=el('div',{class:'card'});
+    card.append(
+      el('div',{}, el('b',{},rec.name||'(no name)')),
+      el('div',{class:'muted'},`id: ${rec.id}`),
+      el('div',{},`Yield: ${rec.yield_units} ${rec.unit_desc}`),
+      el('div',{},`Method: ${rec.methods||'n/a'} | Tags: ${rec.tags||''}`),
+      el('button',{onclick:`copyId('${rec.id}')`},'Use this ID for scaling'),
+      el('details',{}, el('summary',{},'Ingredients'), el('pre',{},JSON.stringify(rec.ingredients,null,2))),
+      el('details',{}, el('summary',{},'Steps'), el('pre',{},rec.steps||'')),
+    );
+    box.append(card);
+  });
+}
+function copyId(id){ document.getElementById('recipeId').value=id; }
+
+async function addRecipe(){
+  let payload;
+  try{ payload=JSON.parse(document.getElementById('recipeJson').value); }
+  catch{ document.getElementById('addOut').textContent='Invalid JSON'; return; }
+  const r=await fetch(`${API}/recipes`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+  const data=await r.json().catch(()=> ({}));
+  document.getElementById('addOut').textContent=r.ok?`Saved (id: ${data?.[0]?.id || data?.id || 'check DB'})`:`Error ${r.status}`;
+}
+
+async function scale(){
+  const recipe_id=document.getElementById('recipeId').value.trim();
+  const target_units=Number(document.getElementById('targetUnits').value);
+  if(!recipe_id||!target_units){ document.getElementById('scaleOut').textContent='Need recipe_id and target_units.'; return; }
+  const r=await fetch(`${API}/planner/plan_batch`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({recipe_id,target_units})});
+  const data=await r.json();
+  const list=(data.scaled_ingredients||[]).map(i=>`• ${i.qty} ${i.unit} ${i.item}`).join('\n');
+  document.getElementById('scaleOut').innerHTML=`<div class="card"><div><b>${data.recipe?.name||''}</b> → ${data.target_units} ${data.recipe?.unit_desc||''}</div><pre>${list||'No ingredients returned.'}</pre></div>`;
+}
+</script>
+</body>
