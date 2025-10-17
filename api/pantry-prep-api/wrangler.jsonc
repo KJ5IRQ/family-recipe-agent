@@ -1,0 +1,31 @@
+/**
+ * Wrangler config for Pantry Prep API
+ * Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pantry-prep-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-10-11",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+
+  // REQUIRED: your Cloudflare account id (Account Home page)
+  "account_id": "83155bf608bce3b57c026011367edd20",
+
+  // OPTIONAL: leave assets if you plan to serve static files from ./public.
+  // If you don't need it, you can delete this whole "assets" block.
+  "assets": {
+    "directory": "./public"
+  },
+
+  // Turn this on if you like graphs and logs.
+  "observability": { "enabled": true },
+
+  // REQUIRED: env vars the Worker can read (non-secret)
+  "vars": {
+    // Replace with your Supabase Project URL (found in Supabase Settings → API)
+    "SUPABASE_URL": "https://rwxzlxcdwdfpmqcuvvzv.supabase.co"
+  }
+
+  // Do not put secrets here. We'll add them with `wrangler secret put ...`
+}
